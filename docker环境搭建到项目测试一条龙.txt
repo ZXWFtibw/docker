@@ -66,3 +66,8 @@ RUN sh -c 'touch /app.jar'
 ENV JAVA_OPTS=""
 ENTRYPOINT [ "sh", "-c", "java $JAVA_OPTS -Djava.security.egd=file:/dev/./urandom -jar /app.jar" ]
 ------------------------------------------------------------------------------------------------------
+
+通过PARAMS注入环境变量(服务器地址)
+不能像windows中用"--变量名=变量值"了，
+只能像注入系统变量那样"-D变量名=变量值"
+docker run --name harbor_1 -e PARAMS="-Dserver-address=192.168.1.80" -p 9000:9000 --volumes-from tomcat_1 -d registry.cn-hangzhou.aliyuncs.com/ftibw/docker
