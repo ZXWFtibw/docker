@@ -14,11 +14,11 @@ systemctl enable docker
 -----------------------------------------------------------------------------------------
 配置docker的加速镜像
 vi /etc/docker/daemon.json
-----------------------------------------------------------------|
-{								|
-	"registry-mirrors":["https://registry.docker-cn.com"]	|
-}								|
-----------------------------------------------------------------|
+-----------------------------------------------------------------------------------------
+{							               
+	"registry-mirrors":["https://registry.docker-cn.com"]	
+}								
+-----------------------------------------------------------------------------------------
 
 -----------------------------------------------------------------------------------------
 拉取并启动mysql:5.7镜像,并将配置和数据目录挂载到主机目录中,设置(默认用户root的)密码123456
@@ -70,4 +70,61 @@ ENTRYPOINT [ "sh", "-c", "java $JAVA_OPTS -Djava.security.egd=file:/dev/./urando
 通过PARAMS注入环境变量(服务器地址)
 不能像windows中用"--变量名=变量值"了，
 只能像注入系统变量那样"-D变量名=变量值"
-docker run --name harbor_1 -e PARAMS="-Dserver-address=192.168.1.80" -p 9000:9000 --volumes-from tomcat_1 -d registry.cn-hangzhou.aliyuncs.com/ftibw/docker
+docker run --name harbor_1 -e PARAMS="-Dtest-address=192.168.1.120" -p 9000:9000 --volumes-from tomcat_1 -d registry.cn-hangzhou.aliyuncs.com/ftibw/docker
+
+日志配置,挂载日志目录，挂载文件上传目录
+------------------------------------------------------------------------------------------------------
+1.使用默认配置连接测试服务器
+docker run --name harbor_1 -p 9000:9000 -v logs:/var/logs --volumes-from tomcat_1 -d harbor
+
+2.自定义配置连接云端  
+docker run --name harbor_1 -p 9000:9000 \
+-v /var/lib/docker/volumes/webapps/_data/logs:/var/logs \
+--volumes-from tomcat_1 \
+-e PARAMS="-Dmysql.address=192.168.1.146 -Dredis.address=192.168.1.146 -Dresource.address=192.168.1.146" \
+-d harbor
+
+=====================================================================================
+nginx-负载均衡如下
+--------------------------------------------------------------
+docker run --name nginx_1 -p 80:80 \
+-v nginx:/etc/nginx \
+-v nginx_logs:/var/log/nginx \
+-v /var/lib/docker/volumes/webapps/_data/logs:/usr/share/nginx/html \
+-d nginx:latest
+--------------------------------------------------------------
+upstream harbor {
+    server 47.94.202.250:9000;
+    server 47.94.202.250:9500;
+    #server 47.94.202.250:10000; # 端口后空格加backup参数热备
+    #fair; #公平模式，按服务响应速度来分配,擦，这个功能是第三方提供的，还的依赖...
+    #内存太小了三个服务带不动...日了狗
+}
+
+server {
+    keepalive_requests 120; #单连接请求上限次数。
+    listen       9000;   #监听端口
+    server_name  47.94.202.250;   #监听地址
+    location  ~*^.+$ {       #请求的url过滤，正则匹配，~为区分大小写，~*为不区分大小写。
+        #root path;  #根目录
+        #index index.html;  #设置默认页
+        proxy_pass  http://harbor;  #请求路由到名为harbor的上游服务器定义的服务列表
+        deny 47.92.202.250;  #拒绝的ip
+        #allow ; #允许的ip
+    }
+}
+--------------------------------------------------------------
+docker run --name harbor_1 -p 9000:9000 \
+-v /var/lib/docker/volumes/webapps/_data/logs:/var/logs \
+--volumes-from tomcat_1 \
+-d registry.cn-hangzhou.aliyuncs.com/ftibw/docker
+--------------------------------------------------------------
+docker run --name harbor_2 -p 9500:9000 \
+-v /var/lib/docker/volumes/webapps/_data/logs:/var/logs \
+--volumes-from tomcat_1 \
+-d registry.cn-hangzhou.aliyuncs.com/ftibw/docker
+--------------------------------------------------------------
+docker run --name harbor_3 -p 10000:9000 \
+-v /var/lib/docker/volumes/webapps/_data/logs:/var/logs \
+--volumes-from tomcat_1 \
+-d registry.cn-hangzhou.aliyuncs.com/ftibw/docker
